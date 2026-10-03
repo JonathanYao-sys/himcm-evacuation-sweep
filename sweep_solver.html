@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>基础场景最优清查方案计算器 · Dijkstra + 全局最优</title>
+<style>
+  :root{
+    --bg:#f4f6fa; --card:#ffffff; --ink:#1c2333; --muted:#66708a; --line:#dfe4ee;
+    --accent:#1f3a93; --accent2:#c0392b; --ok:#1e8449; --warn:#b7791f; --err:#c0392b;
+    --radius:12px; --shadow:0 1px 2px rgba(20,30,60,.06),0 6px 20px rgba(20,30,60,.06);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font:14px/1.55 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",Segoe UI,sans-serif;
+  }
+  header{
+    background:linear-gradient(120deg,#1f3a93,#2b5fc7); color:#fff;
+    padding:18px 24px; box-shadow:var(--shadow);
+  }
+  header h1{margin:0;font-size:19px;letter-spacing:.3px}
+  header p{margin:4px 0 0;font-size:12.5px;opacity:.9}
+  main{
+    display:grid; grid-template-columns:392px minmax(0,1fr);
+    gap:16px; padding:16px; align-items:start;
+  }
+  @media (max-width:1060px){ main{grid-template-columns:1fr} }
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+  aside{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow:auto}
+  @media (max-width:1060px){ aside{position:static;max-height:none} }
+  .panel-body{padding:12px 14px 16px}
+  details.group{border-top:1px solid var(--line);padding:8px 0}
+  details.group:first-child{border-top:none}
+  details.group>summary{
+    cursor:pointer;font-weight:700;font-size:13.5px;color:var(--accent);
+    padding:4px 0;list-style:none;display:flex;align-items:center;gap:6px
+  }
+  details.group>summary::-webkit-details-marker{display:none}
+  details.group>summary::before{content:"▸";font-size:11px;transition:transform .15s}
+  details.group[open]>summary::before{transform:rotate(90deg)}
+  .note{font-size:11.5px;color:var(--muted);margin:2px 0 8px;line-height:1.5}
+  .field{display:grid;grid-template-columns:1fr 96px 40px;gap:8px;align-items:center;margin:5px 0}
+  .field label{font-size:12.5px}
+  .field .unit{font-size:11px;color:var(--muted)}
+  input[type=number],select{
+    width:100%;padding:5px 7px;border:1px solid var(--line);border-radius:7px;
+    font:inherit;font-size:12.5px;background:#fbfcff;color:var(--ink)
+  }
+  input[type=number]:focus,select:focus{outline:2px solid #c7d6f7;border-color:#9db6ea}
+  .chk{display:flex;gap:8px;align-items:center;font-size:12.5px;margin:6px 0}
+  .btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  button{
+    font:inherit;font-weight:600;cursor:pointer;border-radius:9px;padding:9px 14px;
+    border:1px solid var(--line);background:#fff;color:var(--ink)
+  }
+  button:hover{background:#f7f9ff}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;flex:1}
+  button.primary:hover{background:#18307d}
+  button.small{padding:5px 9px;font-size:12px;border-radius:7px}
+  table.mini{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+  table.mini th,table.mini td{border-bottom:1px solid var(--line);padding:4px 6px;text-align:left}
+  table.mini th{color:var(--muted);font-weight:600}
+  table.mini td.num{text-align:right;font-variant-numeric:tabular-nums}
+  table.mini input[type=number]{padding:3px 5px;font-size:12px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  .chip{
+    display:inline-flex;align-items:center;gap:5px;background:#fdeceb;color:#a3271b;
+    border:1px solid #f3c9c5;border-radius:20px;padding:2px 9px;font-size:11.5px
+  }
+  .chip button{border:none;background:none;color:#a3271b;cursor:pointer;font-size:13px;padding:0 0 0 2px}
+  #output{display:flex;flex-direction:column;gap:14px;min-width:0}
+  .banner{padding:10px 14px;border-radius:10px;font-size:13px;display:none}
+  .banner.err{display:block;background:#fdeceb;border:1px solid #f3c9c5;color:#8f2318}
+  .banner.warn{display:block;background:#fff8e6;border:1px solid #f0dcae;color:#8a6212}
+  .banner.info{display:block;background:#eef3ff;border:1px solid #cddcfa;color:#1c3a7a}
+  .summary{padding:14px 16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .stat .k{font-size:11.5px;color:var(--muted)}
+  .stat .v{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;letter-spacing:.2px}
+  .stat.big .v{font-size:30px;color:var(--accent)}
+  .sec{padding:13px 16px 16px}
+  .sec h2{margin:0 0 4px;font-size:14px;color:var(--accent);display:flex;align-items:center;gap:8px}
+  .sec .sub{font-size:11.5px;color:var(--muted);margin:0 0 10px}
+  svg{width:100%;height:auto;display:block;background:#fff;border-radius:8px}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}
+  .rcard{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fcfdff}
+  .rcard h3{margin:0 0 6px;font-size:13px;display:flex;align-items:center;gap:7px}
+  .dot{width:10px;height:10px;border-radius:50%;display:inline-block}
+  .route{font-size:12.5px;margin:3px 0}
+  .route code{background:#eef2fb;border-radius:5px;padding:1px 5px;font-size:12px}
+  .kv{font-size:12px;color:var(--muted);margin:3px 0}
+  .kv b{color:var(--ink);font-variant-numeric:tabular-nums}
+  .gtrack{position:relative;height:24px;background:#f6f8fc;border-radius:5px;overflow:hidden;border:1px solid var(--line)}
+  .grow{display:grid;grid-template-columns:26px 1fr;gap:8px;align-items:center;margin:4px 0}
+  .glabel{font-weight:700;font-size:12px;text-align:center}
+  .seg{position:absolute;top:0;bottom:0;font-size:9px;color:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .gaxis{display:grid;grid-template-columns:26px 1fr;gap:8px;margin-top:2px}
+  .gaxis .ticks{position:relative;height:16px;font-size:10px;color:var(--muted)}
+  .gaxis .ticks span{position:absolute;transform:translateX(-50%)}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:8px}
+  footer{padding:6px 24px 26px;color:var(--muted);font-size:11.5px;line-height:1.7}
+  footer code{background:#eef2fb;border-radius:4px;padding:1px 5px}
+  .stale{opacity:.45}
+  .pill{font-size:11px;background:#eef3ff;color:#1c3a7a;border-radius:20px;padding:2px 9px;font-weight:600}
+</style>
+</head>
+<body>
+<header>
+  <h1>基础场景最优清查方案计算器</h1>
+  <p>单层办公楼 · 中央走廊 · 两名（或更多）响应者 —— Dijkstra 最短路 + Held–Karp + 全局枚举，与 <code>src/run_sweep.py</code> 同一套算法</p>
+</header>
+
+<main>
+  <aside class="card">
+    <div class="panel-body">
+      <div id="fields"></div>
+      <details class="group" id="edgeGroup" open>
+        <summary>可通行性（x<sub>e</sub> = 0）</summary>
+        <div class="note">点击下方<b>网络图</b>中的任意一条边即可阻断/恢复；被阻断的边以红色虚线显示。</div>
+        <div class="chips" id="blockedChips"></div>
+        <div class="btns"><button class="small" id="btnClearBlock">清除全部阻断</button></div>
+      </details>
+      <div class="btns">
+        <button class="primary" id="btnCompute">计算最优方案</button>
+        <button id="btnReset">恢复基准参数</button>
+        <button id="btnExport">导出 JSON</button>
+      </div>
+    </div>
+  </aside>
+
+  <section id="output">
+    <div class="banner" id="banner"></div>
+
+    <div class="card">
+      <div class="summary" id="summary"></div>
+    </div>
+
+    <div class="card sec">
+      <h2>建筑平面图与最优路线 <span class="pill" id="planPill">等待计算</span></h2>
+      <p class="sub">房间颜色 = 该房间的处理进度；绿色 ✓ 为清查完成时刻；箭头颜色区分响应者。</p>
+      <svg id="plan" viewBox="0 0 40 18" preserveAspectRatio="xMidYMid meet"></svg>
+      <div class="legend" id="planLegend"></div>
+    </div>
+
+    <div class="card sec">
+      <h2>建筑网络图（边权 = 通行时间）</h2>
+      <p class="sub">点击任意边可切换“不可通行”；红色虚线为已被阻断的边。</p>
+      <svg id="network" viewBox="0 0 40 18" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+
+    <div class="card sec">
+      <h2>各响应者任务</h2>
+      <div class="cards" id="respCards"></div>
+    </div>
+
+    <div class="card sec">
+      <h2>时间轴（甘特图）</h2>
+      <p class="sub">灰 = 移动，彩色 = 房间搜索，深灰 = 通信报告 + 清查标记。</p>
+      <div id="gantt"></div>
+    </div>
+
+    <div class="card sec">
+      <h2>各房间清查完成时刻</h2>
+      <div id="roomTimes"></div>
+    </div>
+
+    <details class="card sec" id="derivedBox">
+      <summary style="cursor:pointer;font-weight:700;font-size:14px;color:var(--accent)">派生量与校验</summary>
+      <div id="derived" style="margin-top:10px"></div>
+    </details>
+  </section>
+</main>
+
+<footer>
+  公式：边权 <code>c_e = d_e / v_h</code>；单间处理 <code>s_i* = t_0 + α·a_i + β·n_i + t_rep + t_mark</code>；
+  目标 <code>T* = min max_r T_r</code>，其中 <code>T_r = Σ[dist(p_{k-1},p_k) + s*_{p_k}]</code>。<br>
+  页面算法与 <code>src/sweep_core.js</code> 一致，后者已逐项对齐 Python 版（16 组参数下结果完全相同）。
+  参数与《基础场景建模假设.md》第 2/3/4 节一一对应；<code>v_room</code> 是文档里的背景参数，不参与边权计算。<br>
+  固定假设（文档第 4 节）：单层建筑不使用电梯；允许两名响应者并行搜索，故整楼完成时间取 <code>max_r T_r</code>；
+  响应者行走速度与走廊速度 <code>v_h</code> 相同。
+</footer>
+
+<script src="src/sweep_core.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* ============================================================ 参数表定义 */
+const FIELD_GROUPS = [
+  { id:"geom", title:"① 建筑布局（改变房间布局）", open:true, note:"网络节点与边会按这些尺寸自动重建。", fields:[
+    { key:"nRoomsPerSide", label:"每侧房间数 n", unit:"间", min:1, max:6, step:1, int:true },
+    { key:"hallLength",   label:"中央走廊长度 L_h", unit:"m", min:1, max:200, step:1 },
+    { key:"exitLength",   label:"出口至走廊端点 L_exit", unit:"m", min:0.2, max:50, step:0.5 },
+    { key:"doorLength",   label:"房门至走廊 L_door", unit:"m", min:0.1, max:50, step:0.1 },
+    { key:"hallWidth",    label:"走廊宽度 W_h（绘图）", unit:"m", min:0.5, max:10, step:0.5 },
+    { key:"roomDepth",    label:"房间进深（绘图）", unit:"m", min:1, max:20, step:0.5 },
+  ]},
+  { id:"room", title:"② 房间与搜索时间", open:true, note:"s_i = t_0 + α·a_i + β·n_i，s_i* = s_i + t_rep + t_mark。", fields:[
+    { key:"area",      label:"每间面积 a_i", unit:"m²", min:1, max:1000, step:1 },
+    { key:"occupancy", label:"每间人数 n_i", unit:"人", min:0, max:200, step:1 },
+    { key:"t0",        label:"固定检查时间 t_0", unit:"s", min:0, max:600, step:1 },
+    { key:"alpha",     label:"面积系数 α", unit:"s/m²", min:0, max:10, step:0.1 },
+    { key:"beta",      label:"每人引导 β", unit:"s/人", min:0, max:60, step:1 },
+    { key:"tReport",   label:"通信报告 t_rep", unit:"s", min:0, max:600, step:1 },
+    { key:"tMark",     label:"清查标记 t_mark", unit:"s", min:0, max:600, step:1 },
+  ]},
+  { id:"move", title:"③ 移动速度", open:true, note:"v_h 决定边权 c_e = d_e / v_h（响应者行走速度与之一致）；v_room 不参与计算。", fields:[
+    { key:"vHall", label:"走廊行走 v_h", unit:"m/s", min:0.1, max:10, step:0.1 },
+    { key:"vRoom", label:"房间内搜索 v_room", unit:"m/s", min:0.1, max:10, step:0.1 },
+  ]},
+  { id:"resp", title:"④ 响应者", open:true, note:"人数改变后，各响应者起点可分别选择左/右出口。", fields:[
+    { key:"nResponders", label:"响应者人数", unit:"人", min:1, max:6, step:1, int:true },
+  ]},
+  { id:"adv", title:"⑦ 高级", open:false, note:"", fields:[] },
+];
+
+const RESP_COLORS = ["#c0392b","#1f3a93","#1e8449","#8e44ad","#d35400","#16a085"];
+const ROOM_PALETTE = ["#4C72B0","#DD8452","#55A868","#C44E52","#8172B3","#937860","#DA8BC3","#8C8C8C","#CCB974","#64B5CD"];
+const NS = "http://www.w3.org/2000/svg";
+
+/* ============================================================ 全局状态 */
+let cfg = SweepCore.defaultConfig();
+const inputs = {};                 // key -> input element
+let startSelects = [];             // 响应者起点下拉
+let roomRows = [];                 // {room, area, occ, cell}
+let roomValues = {};               // 房间级覆盖值
+let prevGlobal = { area: cfg.area, occupancy: cfg.occupancy };
+let lastGood = null;               // 最近一次成功计算的 {scene, sol, ...}
+
+const $ = (id) => document.getElementById(id);
+const fmt = (x, d=2) => (!isFinite(x) ? "—" : Number(x).toFixed(d));
+const esc = (s) => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
+/* ============================================================ 构建表单 */
+function buildForm(){
+  const host = $("fields");
+  FIELD_GROUPS.forEach(g => {
+    const d = document.createElement("details");
+    d.className = "group"; if (g.open) d.open = true;
+    const s = document.createElement("summary"); s.textContent = g.title; d.appendChild(s);
+    if (g.note){ const n = document.createElement("div"); n.className = "note"; n.textContent = g.note; d.appendChild(n); }
+    g.fields.forEach(f => {
+      const row = document.createElement("div"); row.className = "field";
+      const lab = document.createElement("label"); lab.textContent = f.label; lab.title = f.key;
+      const inp = document.createElement("input");
+      inp.type = "number"; inp.min = f.min; inp.max = f.max; inp.step = f.step;
+      inp.value = SweepCore.defaultConfig()[f.key];
+      inp.addEventListener("input", () => { onFieldChange(f); });
+      inp.addEventListener("change", () => { preview(); });
+      const u = document.createElement("span"); u.className = "unit"; u.textContent = f.unit || "";
+      row.append(lab, inp, u); d.appendChild(row);
+      inputs[f.key] = inp; inp._spec = f;
+    });
+    host.appendChild(d);
+  });
+  // 高级：镜像去重
+  const adv = host.lastChild;
+  const chk = document.createElement("label"); chk.className = "chk";
+  const cb = document.createElement("input"); cb.type = "checkbox";
+  cb.addEventListener("change", preview);
+  const sp = document.createElement("span"); sp.textContent = "并列最优解按左右镜像去重（只影响计数口径）";
+  chk.append(cb, sp); adv.appendChild(chk); inputs.dedupMirrorTies = cb;
+  // 房间级覆盖表
+  const rt = document.createElement("details"); rt.className = "group";
+  rt.innerHTML = '<summary>⑤ 按房间微调（可选）</summary><div class="note">默认跟随上面的全局面积/人数；单独修改某一间后即作为该房间的固定值。</div>';
+  const tbl = document.createElement("table"); tbl.className = "mini";
+  tbl.innerHTML = "<thead><tr><th>房间</th><th>面积 a<sub>i</sub> (m²)</th><th>人数 n<sub>i</sub></th><th>s<sub>i</sub>* (s)</th></tr></thead><tbody></tbody>";
+  rt.appendChild(tbl); host.insertBefore(rt, adv); rt.id = "roomGroup";
+  roomTableBody = tbl.querySelector("tbody");
+  // 响应者起点
+  const rg = document.createElement("details"); rg.className = "group"; rg.open = true;
+  rg.innerHTML = '<summary>⑥ 各响应者起点</summary><div class="note">基准场景：左出口、右出口各一人。</div>';
+  rg.id = "startGroup"; host.insertBefore(rg, adv);
+  startHost = rg;
+}
+let roomTableBody = null, startHost = null;
+
+function readNum(f){
+  let v = Number(inputs[f.key].value);
+  if (!isFinite(v)) v = SweepCore.defaultConfig()[f.key];
+  v = clamp(v, f.min, f.max);
+  return f.int ? Math.round(v) : v;
+}
+
+function onFieldChange(f){
+  if (f.key === "area" || f.key === "occupancy"){
+    const nv = Number(inputs[f.key].value);
+    if (isFinite(nv)){
+      roomRows.forEach(r => {
+        const inp = f.key === "area" ? r.area : r.occ;
+        if (Number(inp.value) === prevGlobal[f.key]){ inp.value = nv; }
+      });
+      prevGlobal[f.key] = nv;
+    }
+    refreshRoomTimes();
+  }
+  if (f.key === "nRoomsPerSide" || f.key === "nResponders") rebuildDynamic();
+  if (["area","occupancy","t0","alpha","beta","tReport","tMark"].includes(f.key)) refreshRoomTimes();
+  preview();
+}
+
+/* ------------------------------------------------ 房间表 / 起点下拉 重建 */
+function roomNames(n){ const a=[]; for (let i=1;i<=2*n;i++) a.push("R"+i); return a; }
+
+function rebuildDynamic(){
+  const n = readNum(inputs.nRoomsPerSide._spec);
+  const names = roomNames(n);
+  // 房间表
+  roomTableBody.innerHTML = "";
+  roomRows = [];
+  names.forEach(room => {
+    const tr = document.createElement("tr");
+    const td0 = document.createElement("td"); td0.textContent = room; td0.style.fontWeight = "700";
+    const v = roomValues[room] || {};
+    const a = document.createElement("input");
+    a.type="number"; a.min=0.1; a.step=1; a.value = (v.area != null ? v.area : inputs.area.value);
+    const o = document.createElement("input");
+    o.type="number"; o.min=0; o.step=1; o.value = (v.occ != null ? v.occ : inputs.occupancy.value);
+    const td1 = document.createElement("td"); td1.appendChild(a);
+    const td2 = document.createElement("td"); td2.appendChild(o);
+    const td3 = document.createElement("td"); td3.className = "num";
+    tr.append(td0, td1, td2, td3); roomTableBody.appendChild(tr);
+    const row = { room, area:a, occ:o, cell:td3 };
+    const onEdit = () => {
+      roomValues[room] = { area: Number(a.value), occ: Number(o.value) };
+      refreshRoomTimes(); preview();
+    };
+    a.addEventListener("input", onEdit); o.addEventListener("input", onEdit);
+    roomRows.push(row);
+  });
+  // 起点下拉
+  const nOld = startSelects.length;
+  const oldVals = startSelects.map(s => s.value);
+  startHost.querySelectorAll(".field").forEach(e => e.remove());
+  startSelects = [];
+  const nResp = readNum(inputs.nResponders._spec);
+  for (let i = 0; i < nResp; i++){
+    const name = SweepCore.RESPONDER_NAMES[i];
+    const row = document.createElement("div"); row.className = "field";
+    row.style.gridTemplateColumns = "1fr 142px 6px";
+    const lab = document.createElement("label"); lab.textContent = "响应者 " + name + " 起点";
+    const sel = document.createElement("select");
+    ["E_L","E_R"].forEach(v => {
+      const op = document.createElement("option"); op.value = v;
+      op.textContent = (v === "E_L" ? "E_L 左出口" : "E_R 右出口");
+      sel.appendChild(op);
+    });
+    sel.value = oldVals[i] || (i % 2 === 0 ? "E_L" : "E_R");
+    sel.addEventListener("change", preview);
+    const u = document.createElement("span"); u.className = "unit"; u.textContent = "";
+    row.append(lab, sel, u); startHost.appendChild(row);
+    startSelects.push(sel);
+  }
+  refreshRoomTimes();
+}
+
+function refreshRoomTimes(){
+  roomRows.forEach(r => {
+    const a = Number(r.area.value), o = Number(r.occ.value);
+    const s = Number(inputs.t0.value) + Number(inputs.alpha.value) * a + Number(inputs.beta.value) * o
+            + Number(inputs.tReport.value) + Number(inputs.tMark.value);
+    r.cell.textContent = isFinite(s) ? s.toFixed(1) : "—";
+  });
+}
+
+/* ============================================================ 读取参数 */
+function readCfg(){
+  const c = SweepCore.defaultConfig();
+  FIELD_GROUPS.forEach(g => g.fields.forEach(f => { c[f.key] = readNum(f); }));
+  c.dedupMirrorTies = !!inputs.dedupMirrorTies.checked;
+  c.responderStarts = startSelects.map(s => s.value);
+  c.roomArea = {}; c.roomOcc = {};
+  roomRows.forEach(r => {
+    c.roomArea[r.room] = Number(r.area.value);
+    c.roomOcc[r.room] = Number(r.occ.value);
+  });
+  c.blockedEdges = (cfg.blockedEdges || []).map(e => Array.isArray(e) ? e.slice() : String(e));
+  return c;
+}
+
+/* ============================================================ 阻断边 */
+function edgePair(e){ return Array.isArray(e) ? [e[0], e[1]] : String(e).split(/[-\u2013|,]/); }
+function toggleEdge(u, v){
+  const list = (cfg.blockedEdges || []).slice();
+  const idx = list.findIndex(e => { const p = edgePair(e);
+    return (p[0]===u && p[1]===v) || (p[0]===v && p[1]===u); });
+  if (idx >= 0) list.splice(idx, 1); else list.push([u, v]);
+  cfg.blockedEdges = list;
+  updateChips(); preview();
+}
+function updateChips(){
+  const host = $("blockedChips"); host.innerHTML = "";
+  const list = cfg.blockedEdges || [];
+  if (!list.length){ host.innerHTML = '<span style="font-size:11.5px;color:#66708a">当前没有阻断边</span>'; return; }
+  list.forEach((e, i) => {
+    const p = edgePair(e);
+    const c = document.createElement("span"); c.className = "chip";
+    c.innerHTML = "🚫 " + esc(p[0]) + "–" + esc(p[1]);
+    const b = document.createElement("button"); b.textContent = "×"; b.title = "恢复通行";
+    b.onclick = () => { const l = cfg.blockedEdges.slice(); l.splice(i,1); cfg.blockedEdges = l; updateChips(); preview(); };
+    c.appendChild(b); host.appendChild(c);
+  });
+}
+
+/* ============================================================ 预览 & 计算 */
+function showBanner(kind, text){
+  const b = $("banner");
+  if (!text){ b.className = "banner"; b.textContent = ""; return; }
+  b.className = "banner " + kind; b.textContent = text;
+}
+function setStale(stale){
+  $("planPill").textContent = stale ? "参数已修改，请点击计算" : "已计算";
+  $("planPill").style.color = stale ? "#b7791f" : "#1c3a7a";
+}
+
+function preview(){
+  showBanner("", "");
+  try {
+    cfg = readCfg();
+    const scene = SweepCore.buildScene(cfg);
+    renderPlan(scene, null, null, null, true);
+    renderNetwork(scene);
+    if (scene.unreachable && scene.unreachable.length){
+      showBanner("err", "以下房间因阻断边而不可达：" + scene.unreachable.join("、") + "，请取消部分阻断后再计算。");
+      clearOutput(); setStale(true); return;
+    }
+    lastGood = null;
+    clearOutput(); setStale(true);
+  } catch(err){
+    showBanner("err", "参数有误：" + err.message);
+  }
+}
+
+function compute(){
+  showBanner("", "");
+  let scene, dists, prevs, sol, schedules, clearTimes;
+  try {
+    cfg = readCfg();
+    scene = SweepCore.buildScene(cfg);
+  } catch(err){ showBanner("err", "参数有误：" + err.message); return; }
+
+  renderPlan(scene, null, null, null, true);
+  renderNetwork(scene);
+
+  if (scene.unreachable && scene.unreachable.length){
+    showBanner("err", "以下房间因阻断边而不可达：" + scene.unreachable.join("、") + "，无法完成清查。请取消部分阻断。");
+    clearOutput(); setStale(true); return;
+  }
+  try {
+    const t0 = performance.now();
+    const pr = SweepCore.preparePairs(scene);
+    dists = pr.dists; prevs = pr.prevs;
+    sol = SweepCore.optimize(scene, dists);
+    const bs = SweepCore.buildSchedule(scene, sol.routes, prevs);
+    schedules = bs.schedules; clearTimes = bs.clearTimes;
+    const single = SweepCore.bestFullRoute(scene, dists, sol.responders[0]);
+    let back = null;
+    sol.responders.forEach(r => {
+      const route = sol.routes[r];
+      if (!route.length) return;
+      let m = Infinity;
+      scene.exits.forEach(e => { m = Math.min(m, dists[route[route.length-1]][e]); });
+      if (isFinite(m)) back = Math.max(back === null ? 0 : back, sol.times[r] + m);
+    });
+    const ms = performance.now() - t0;
+    lastGood = { scene, dists, prevs, sol, schedules, clearTimes, single, back, ms };
+  } catch(err){
+    showBanner("err", "求解失败：" + err.message);
+    clearOutput(); setStale(true); return;
+  }
+  setStale(false);
+  renderAll(lastGood);
+}
+
+function clearOutput(){
+  $("summary").innerHTML = '<div class="stat"><div class="k">整楼清查完成时间</div><div class="v">—</div></div>';
+  $("respCards").innerHTML = '<div class="kv">点击左侧「计算最优方案」后显示。</div>';
+  $("gantt").innerHTML = "";
+  $("roomTimes").innerHTML = "";
+  $("derived").innerHTML = "";
+  $("planLegend").innerHTML = "";
+}
+
+/* ============================================================ 渲染：平面图 */
+function renderPlan(scene, sol, prevs, clearTimes, previewMode){
+  const svg = $("plan"); svg.innerHTML = "";
+  const pad = 3.5;
+  const x0 = scene.xBounds[0] - pad, x1 = scene.xBounds[1] + pad;
+  const yTop = scene.yTop + pad;
+  svg.setAttribute("viewBox", x0 + " " + (-yTop) + " " + (x1 - x0) + " " + (2 * yTop));
+
+  // 箭头 marker
+  const defs = document.createElementNS(NS, "defs");
+  scene.responderNames.forEach((r, i) => {
+    const m = document.createElementNS(NS, "marker");
+    m.setAttribute("id", "arrow" + i); m.setAttribute("viewBox", "0 0 10 10");
+    m.setAttribute("refX", "8"); m.setAttribute("refY", "5");
+    m.setAttribute("markerWidth", "5"); m.setAttribute("markerHeight", "5");
+    m.setAttribute("orient", "auto-start-reverse");
+    const p = document.createElementNS(NS, "path");
+    p.setAttribute("d", "M 0 0 L 10 5 L 0 10 z"); p.setAttribute("fill", RESP_COLORS[i % RESP_COLORS.length]);
+    m.appendChild(p); defs.appendChild(m);
+  });
+  svg.appendChild(defs);
+
+  const gRooms = document.createElementNS(NS, "g"); svg.appendChild(gRooms);
+  const gWall = document.createElementNS(NS, "g"); svg.appendChild(gWall);
+  const gRoute = document.createElementNS(NS, "g"); svg.appendChild(gRoute);
+  const gLab = document.createElementNS(NS, "g"); svg.appendChild(gLab);
+  const add = (tag, attrs, parent) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    (parent || gLab).appendChild(e); return e;
+  };
+  const line = (xa, ya, xb, yb, attrs) => add("line", Object.assign({x1:xa, y1:-ya, x2:xb, y2:-yb}, attrs), gWall);
+
+  // 房间
+  scene.rooms.forEach((r, i) => {
+    const [rx, ry, rw, rh] = scene.roomRects[r];
+    const base = ROOM_PALETTE[i % ROOM_PALETTE.length];
+    const done = clearTimes && clearTimes[r] != null;
+    add("rect", { x: rx, y: -(ry + rh), width: rw, height: rh,
+      fill: done ? base : "#f1f3f8", "fill-opacity": done ? 0.55 : 1 }, gRooms);
+    const up = ry > 0;
+    add("text", { x: rx + rw/2, y: -(ry + (up ? rh - 0.11*rh : 0.11*rh)),
+      "text-anchor":"middle", "dominant-baseline":"middle", "font-size":1.15,
+      "font-weight":"700", fill:"#1c2333" }, gLab).textContent = r;
+    add("text", { x: rx + rw/2, y: -(ry + (up ? rh - 0.26*rh : 0.26*rh)),
+      "text-anchor":"middle", "dominant-baseline":"middle", "font-size":0.62, fill:"#66708a" }, gLab)
+      .textContent = SweepCore.areaOf(scene.cfg, r) + " m² · " + SweepCore.occOf(scene.cfg, r) + " 人";
+    if (done){
+      add("text", { x: rx + rw/2, y: -(ry + (up ? rh - 0.44*rh : 0.44*rh)),
+        "text-anchor":"middle", "dominant-baseline":"middle", "font-size":0.8,
+        "font-weight":"700", fill:"#1e8449" }, gLab).textContent = "✓ " + clearTimes[r].toFixed(1) + " s";
+    }
+  });
+
+  // 墙体
+  const L = scene.cfg.hallLength, hy = scene.hallY, Lex = scene.cfg.exitLength;
+  const w = scene.roomWidth, n = scene.n;
+  const wallAttr = { stroke:"#111", "stroke-width":0.2, "stroke-linecap":"butt" };
+  line(0, scene.yTop, L, scene.yTop, wallAttr);
+  line(0, -scene.yTop, L, -scene.yTop, wallAttr);
+  for (let i = 0; i <= n; i++){
+    line(i*w, hy, i*w, scene.yTop, {stroke:"#111","stroke-width":0.18});
+    line(i*w, -scene.yTop, i*w, -hy, {stroke:"#111","stroke-width":0.18});
+  }
+  // 走廊墙（留门洞）
+  const half = Math.min(0.75, w*0.3);
+  const doors = Array.from(new Set(Object.values(scene.doorX))).sort((a,b)=>a-b);
+  [hy, -hy].forEach(y => {
+    let prev = -Lex;
+    doors.forEach(dx => { line(prev, y, dx - half, y, wallAttr); prev = dx + half; });
+    line(prev, y, L + Lex, y, wallAttr);
+  });
+  const stub = Math.min(0.7, hy*0.7);
+  [-Lex, L + Lex].forEach((x, k) => {
+    line(x, stub, x, hy, wallAttr); line(x, -hy, x, -stub, wallAttr);
+    const dir = k === 0 ? -1 : 1;
+    add("polygon", { points: (x + dir*1.5) + ",0 " + (x + dir*0.6) + ",-0.34 " + (x + dir*0.6) + ",0.34",
+      fill: "#1e8449" }, gLab);
+    add("text", { x: x + dir*2.3, y: 0.05, "text-anchor":"middle", "dominant-baseline":"middle",
+      "font-size":0.85, "font-weight":"700", fill:"#1e8449" }, gLab).textContent = "EXIT";
+  });
+  add("text", { x: L/2, y: -(-0.55*hy), "text-anchor":"middle", "font-size":0.7, fill:"#98a1b5" }, gLab)
+    .textContent = "走廊 " + L + " m";
+
+  // 路线
+  if (sol && prevs){
+    const N = scene.responderNames.length;
+    scene.responderNames.forEach((resp, i) => {
+      const color = RESP_COLORS[i % RESP_COLORS.length];
+      const dy = N > 1 ? 0.16 - 0.32*i/(N-1) : 0;
+      (sol.legs[resp] || []).forEach(([u, room], k) => {
+        const path = SweepCore.shortestPath(prevs[u], u, room);
+        if (!path) return;
+        const pts = [];
+        for (let j = 0; j < path.length - 1; j++){
+          let [xa, ya] = scene.pos[path[j]], [xb, yb] = scene.pos[path[j+1]];
+          if (ya === 0 && yb === 0){ ya = dy; yb = dy; }
+          pts.push([xa, ya], [xb, yb]);
+        }
+        const uniq = [];
+        pts.forEach(p => { const L2 = uniq[uniq.length-1];
+          if (!L2 || Math.abs(L2[0]-p[0]) > 1e-9 || Math.abs(L2[1]-p[1]) > 1e-9) uniq.push(p); });
+        add("polyline", { points: uniq.map(p => p[0] + "," + (-p[1])).join(" "),
+          fill:"none", stroke:color, "stroke-width":0.24, "stroke-opacity":0.95,
+          "marker-end":"url(#arrow" + i + ")" }, gRoute);
+        add("text", { x: scene.pos[room][0] + 0.65, y: -(scene.pos[room][1] + (scene.pos[room][1] > 0 ? 0.35 : -0.35)),
+          "font-size":0.8, "font-weight":"700", fill:color }, gLab).textContent = resp + (k+1);
+      });
+    });
+    const lg = $("planLegend");
+    lg.innerHTML = scene.responderNames.map((r, i) =>
+      '<span><span class="dot" style="background:' + RESP_COLORS[i % RESP_COLORS.length] + '"></span> 响应者 ' + r +
+      '（' + scene.starts[r] + ' 进入）</span>').join("");
+  }
+}
+
+/* ============================================================ 渲染：网络图 */
+function renderNetwork(scene){
+  const svg = $("network"); svg.innerHTML = "";
+  const pad = 2.4;
+  let maxAbsY = 0;
+  Object.keys(scene.pos).forEach(k => { maxAbsY = Math.max(maxAbsY, Math.abs(scene.pos[k][1])); });
+  const x0 = scene.xBounds[0] - pad, x1 = scene.xBounds[1] + pad;
+  const yTop = maxAbsY + 2.4;
+  svg.setAttribute("viewBox", x0 + " " + (-yTop) + " " + (x1 - x0) + " " + (2 * yTop));
+  const blocked = SweepCore.blockedSet(scene.cfg.blockedEdges);
+  const gE = document.createElementNS(NS, "g"), gN = document.createElementNS(NS, "g"),
+        gT = document.createElementNS(NS, "g"), gH = document.createElementNS(NS, "g");
+  svg.append(gE, gN, gT, gH);
+  const add = (tag, attrs, parent) => {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    parent.appendChild(e); return e;
+  };
+  scene.allEdges.forEach(([u, v, d]) => {
+    const [xa, ya] = scene.pos[u], [xb, yb] = scene.pos[v];
+    const isBlocked = blocked.has(u + "|" + v);
+    const c = d / scene.cfg.vHall;
+    add("line", { x1:xa, y1:-ya, x2:xb, y2:-yb, stroke: isBlocked ? "#c0392b" : "#9aa4bb",
+      "stroke-width": isBlocked ? 0.16 : 0.15, "stroke-dasharray": isBlocked ? "0.5 0.35" : "none" }, gE);
+    const mx = (xa+xb)/2, my = (ya+yb)/2;
+    const vert = Math.abs(xa-xb) < 1e-9;
+    // 水平边标签放到走廊线与房间节点之间（y = 1.05），竖直门边标签放在节点右侧
+    add("text", { x: vert ? mx + 0.55 : mx, y: vert ? -my : -1.05,
+      "text-anchor": vert ? "start" : "middle", "dominant-baseline": "middle",
+      "font-size":0.66, fill:"#66708a", stroke:"#fff", "stroke-width":0.16, "paint-order":"stroke" }, gT)
+      .textContent = d + " m → " + c.toFixed(2) + " s";
+    // 点击热区
+    const hit = add("line", { x1:xa, y1:-ya, x2:xb, y2:-yb, stroke:"transparent",
+      "stroke-width":0.9, style:"cursor:pointer" }, gH);
+    const tt = document.createElementNS(NS, "title");
+    tt.textContent = u + "–" + v + "：" + d + " m = " + c.toFixed(2) + " s（点击" + (isBlocked ? "恢复通行" : "设为阻断") + "）";
+    hit.appendChild(tt);
+    hit.addEventListener("click", () => toggleEdge(u, v));
+  });
+  const roomIdx = {}; scene.rooms.forEach((r, i) => roomIdx[r] = i);
+  Object.keys(scene.pos).forEach(node => {
+    const [x, y] = scene.pos[node];
+    if (node in roomIdx){
+      add("circle", { cx:x, cy:-y, r:0.95, fill:ROOM_PALETTE[roomIdx[node] % ROOM_PALETTE.length],
+        stroke:"#111", "stroke-width":0.11 }, gN);
+      add("text", { x:x, y:-y + 0.02, "text-anchor":"middle", "dominant-baseline":"middle",
+        "font-size":0.82, "font-weight":"700", fill:"#fff" }, gN).textContent = node;
+    } else if (node[0] === "E"){
+      add("rect", { x:x-0.85, y:-y-0.85, width:1.7, height:1.7, fill:"#1e8449", rx:0.18 }, gN);
+      add("text", { x:x, y:-y+2.75, "text-anchor":"middle", "font-size":0.78,
+        "font-weight":"700", fill:"#1e8449" }, gN).textContent = "出口 " + node;
+    } else {
+      // H_L / H_R / N1…Nn：名字写在节点圆圈内，避免与上下的房间节点标签重叠
+      add("circle", { cx:x, cy:-y, r:0.78, fill:"#e6eaf3", stroke:"#111", "stroke-width":0.1 }, gN);
+      add("text", { x:x, y:-y+0.02, "text-anchor":"middle", "dominant-baseline":"middle",
+        "font-size":0.62, "font-weight":"600", fill:"#3c465e" }, gN).textContent = node;
+    }
+  });
+}
+
+/* ============================================================ 渲染：结果 */
+function renderAll(ctx){
+  const { scene, sol, schedules, clearTimes, single, back, ms } = ctx;
+  renderSummary(scene, sol, single, back, ms);
+  renderPlan(scene, sol, ctx.prevs, clearTimes, false);
+  renderNetwork(scene);
+  renderRespCards(scene, sol);
+  renderGantt(scene, sol, schedules);
+  renderRoomTimes(scene, sol, clearTimes);
+  renderDerived(scene, sol);
+}
+
+function renderSummary(scene, sol, single, back, ms){
+  const T = sol.makespan;
+  const ties = sol.nTies == null ? "≈" + sol.estTies + "（枚举超限）"
+    : sol.nTies + (sol.nTiesDistinct != null ? "（镜像去重 " + sol.nTiesDistinct + "）" : "");
+  $("summary").innerHTML = [
+    ['big', '整楼清查完成时间 T*', fmt(T,2) + ' s', fmt(T/60,2) + ' min'],
+    ['', '候选方案（可行）', sol.evaluated.toLocaleString(), '个'],
+    ['', '并列最优方案', ties, ''],
+    ['', '仅 1 名响应者', single ? fmt(single.time,2) + ' s' : '不可行', single ? fmt(single.time/60,2) + ' min' : ''],
+    ['', '清查后退回最近出口', back != null ? fmt(back,2) + ' s' : '不可行', back != null ? fmt(back/60,2) + ' min' : ''],
+    ['', '求解耗时', fmt(ms,1), 'ms'],
+  ].map(([cls, k, v, sub]) => '<div class="stat ' + cls + '"><div class="k">' + k + '</div><div class="v">' + v +
+      (sub ? ' <span style="font-size:12px;color:#66708a;font-weight:600">' + sub + '</span>' : '') + '</div></div>').join("");
+}
+
+function renderRespCards(scene, sol){
+  const host = $("respCards");
+  host.innerHTML = scene.responderNames.map((resp, i) => {
+    const color = RESP_COLORS[i % RESP_COLORS.length];
+    const route = sol.routes[resp] || [];
+    const proc = sol.times[resp] - sol.travel[resp];
+    if (!route.length){
+      return '<div class="rcard"><h3><span class="dot" style="background:' + color + '"></span>响应者 ' + resp +
+        '</h3><div class="kv">待命（没有分到房间）</div></div>';
+    }
+    return '<div class="rcard"><h3><span class="dot" style="background:' + color + '"></span>响应者 ' + resp +
+      ' · ' + scene.starts[resp] + ' 进入</h3>' +
+      '<div class="route">' + [scene.starts[resp]].concat(route).map(x => '<code>' + esc(x) + '</code>').join(' → ') + '</div>' +
+      '<div class="kv">移动 <b>' + fmt(sol.travel[resp] * scene.cfg.vHall, 1) + ' m</b> = <b>' + fmt(sol.travel[resp], 2) + ' s</b></div>' +
+      '<div class="kv">' + route.length + ' 间房处理合计 <b>' + fmt(proc, 2) + ' s</b></div>' +
+      '<div class="kv">完成时间 T<sub>' + resp + '</sub> = <b>' + fmt(sol.times[resp], 2) + ' s</b></div></div>';
+  }).join("");
+}
+
+function roomColorOf(i){ return ROOM_PALETTE[i % ROOM_PALETTE.length]; }
+
+function renderGantt(scene, sol, schedules){
+  const total = sol.makespan + 4;
+  const roomIdx = {}; scene.rooms.forEach((r, i) => roomIdx[r] = i);
+  const rows = scene.responderNames.map(resp => {
+    const segs = (schedules[resp] || []).map(s => {
+      const left = s.t0 / total * 100, wid = (s.t1 - s.t0) / total * 100;
+      let bg = "#cfd4e0", label = "";
+      if (s.kind === "search"){ bg = roomColorOf(roomIdx[s.room]); label = s.room; }
+      else if (s.kind !== "move"){ bg = "#6b7280"; }
+      const tip = s.kind === "move" ? ("移动 " + s.u + "→" + s.v) :
+        (s.kind === "search" ? ("搜索 " + s.room) : (s.kind === "report" ? "报告 " + s.room : "标记 " + s.room));
+      return '<div class="seg" style="left:' + left + '%;width:' + wid + '%;background:' + bg + '" title="' +
+        esc(tip + "：" + s.t0.toFixed(1) + "–" + s.t1.toFixed(1) + " s") + '">' + esc(label) + '</div>';
+    }).join("");
+    return '<div class="grow"><div class="glabel">' + esc(resp) + '</div><div class="gtrack">' + segs + '</div></div>';
+  }).join("");
+  const nTicks = 8, ticks = [];
+  for (let i = 0; i <= nTicks; i++){
+    const t = total * i / nTicks;
+    ticks.push('<span style="left:' + (100*i/nTicks) + '%">' + t.toFixed(0) + '</span>');
+  }
+  $("gantt").innerHTML = rows + '<div class="gaxis"><div></div><div class="ticks">' + ticks.join("") +
+    '</div></div><div class="kv" style="margin-top:6px">时间 (s)；总时长 T* = ' + fmt(sol.makespan,2) + ' s</div>';
+}
+
+function renderRoomTimes(scene, sol, clearTimes){
+  const owner = {};
+  scene.responderNames.forEach(r => (sol.routes[r] || []).forEach(x => owner[x] = r));
+  const order = scene.rooms.slice().sort((a, b) => clearTimes[a] - clearTimes[b]);
+  let html = '<table class="mini"><thead><tr><th>房间</th><th>面积/人数</th><th>s<sub>i</sub>* (s)</th><th>负责</th><th>完成时刻 (s)</th></tr></thead><tbody>';
+  order.forEach(r => {
+    html += '<tr><td style="font-weight:700">' + esc(r) + '</td><td>' + SweepCore.areaOf(scene.cfg, r) + ' m² / ' +
+      SweepCore.occOf(scene.cfg, r) + ' 人</td><td class="num">' + fmt(scene.roomTime[r], 1) + '</td><td>' +
+      esc(owner[r] || "—") + '</td><td class="num">' + fmt(clearTimes[r], 2) + '</td></tr>';
+  });
+  html += '</tbody></table>';
+  $("roomTimes").innerHTML = html;
+}
+
+function renderDerived(scene, sol){
+  const c = scene.cfg;
+  const sAll = scene.rooms.map(r => scene.roomTime[r]);
+  const sMin = Math.min.apply(null, sAll), sMax = Math.max.apply(null, sAll);
+  const rows = [
+    ["每间房宽度 = L_h / n", fmt(scene.roomWidth, 3) + " m"],
+    ["房间总数", scene.rooms.length + " 间"],
+    ["网络节点 |V|", Object.keys(scene.pos).length + " 个"],
+    ["网络边 |E|", scene.edges.length + " 条（全部 " + scene.allEdges.length + " 条）"],
+    ["单间处理时间 s_i*", (sMin === sMax ? fmt(sMin,1) : fmt(sMin,1) + " ~ " + fmt(sMax,1)) + " s"],
+    ["候选方案（分配 × 顺序）", sol.evaluated.toLocaleString() + " 个"],
+    ["并列解总枚举量", sol.estTies.toLocaleString() + (sol.tiesCapped ? "（超过上限，未精确枚举）" : "")],
+    ["响应者起点", scene.responderNames.map(r => r + "=" + scene.starts[r]).join("、")],
+    ["阻断边", (c.blockedEdges || []).length ? c.blockedEdges.map(e => { const p = edgePair(e); return p[0]+"–"+p[1]; }).join("、") : "无"],
+  ];
+  $("derived").innerHTML = '<table class="mini">' + rows.map(([k, v]) =>
+    '<tr><td>' + esc(k) + '</td><td class="num" style="font-weight:600">' + esc(v) + '</td></tr>').join("") + '</table>';
+}
+
+/* ============================================================ 导出 */
+function exportJSON(){
+  if (!lastGood){ compute(); }
+  if (!lastGood) return;
+  const { scene, sol, clearTimes, single, back } = lastGood;
+  const out = {
+    params: Object.assign({}, scene.cfg),
+    derived: {
+      room_width_m: scene.roomWidth, n_rooms: scene.rooms.length,
+      n_nodes: Object.keys(scene.pos).length, n_edges: scene.edges.length,
+      room_total_time_s: scene.roomTime
+    },
+    edges: scene.edges.map(e => ({ u: e[0], v: e[1], length_m: e[2], weight_s: e[2] / scene.cfg.vHall })),
+    optimal: {
+      makespan_s: sol.makespan, makespan_min: sol.makespan / 60,
+      routes: sol.routes, times_s: sol.times,
+      travel_m: Object.fromEntries(scene.responderNames.map(r => [r, sol.travel[r] * scene.cfg.vHall])),
+      clear_times_s: clearTimes,
+      candidates: sol.evaluated, n_ties: sol.nTies, ties_capped: sol.tiesCapped
+    },
+    baselines: { single_responder_s: single ? single.time : null, return_to_exit_s: back }
+  };
+  const blob = new Blob([JSON.stringify(out, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = "sweep_result_html.json"; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+/* ============================================================ 初始化 */
+function resetAll(){
+  const d = SweepCore.defaultConfig();
+  FIELD_GROUPS.forEach(g => g.fields.forEach(f => { inputs[f.key].value = d[f.key]; }));
+  inputs.dedupMirrorTies.checked = false;
+  prevGlobal = { area: d.area, occupancy: d.occupancy };
+  roomValues = {};
+  cfg = SweepCore.defaultConfig();
+  updateChips();
+  rebuildDynamic();
+  compute();
+}
+
+function init(){
+  if (typeof SweepCore === "undefined"){
+    showBanner("err", "未能加载 src/sweep_core.js。若浏览器限制本地文件读取，请在本目录运行 python3 -m http.server 后访问该页面。");
+    return;
+  }
+  buildForm();
+  rebuildDynamic();
+  updateChips();
+  $("btnCompute").onclick = compute;
+  $("btnReset").onclick = resetAll;
+  $("btnExport").onclick = exportJSON;
+  $("btnClearBlock").onclick = () => { cfg.blockedEdges = []; updateChips(); preview(); };
+  compute();     // 打开页面即给出基准场景的最优解
+}
+document.addEventListener("DOMContentLoaded", init);
+})();
+</script>
+</body>
+</html>

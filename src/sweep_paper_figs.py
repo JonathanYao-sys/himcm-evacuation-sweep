@@ -11,7 +11,6 @@
   fig_paper_strategy.png     清查策略对比
 另存 output/sweep_sensitivity.json
 """
-import itertools
 import json
 
 import matplotlib
@@ -21,9 +20,11 @@ import numpy as np
 from matplotlib.patches import Rectangle, FancyBboxPatch, FancyArrowPatch, Patch
 from matplotlib.lines import Line2D
 
+from sweep_config import Config
 from sweep_building import (ROOT, FIG_DIR, OUT_DIR, V_WALK, T0, ALPHA, BETA,
                             AREA, OCC, T_REPORT, T_MARK, S_SEARCH, S_ROOM,
-                            ROOMS, STARTS, EDGES, POS, build_graph, WEIGHT)
+                            ROOMS, STARTS, EDGES, POS, WEIGHT, DEFAULT_SCENE,
+                            build_scene)
 from sweep_dijkstra import dijkstra, shortest_path
 from sweep_optimize import prepare_pairs, optimize, build_schedule, route_eval
 from sweep_visualize import draw_floorplan, draw_route_arrows, RESP_COLOR, ROOM_COLOR
@@ -43,28 +44,41 @@ KEY_NODES = ["E_L", "E_R"] + ROOMS
 
 
 # ------------------------------------------------------------------ 通用求解
-def solve(v_walk=V_WALK, s_room=S_ROOM, blocked=(), starts=None):
-    """给定参数重算最优解。starts 为各响应者起点列表（支持 1~3 人）。"""
-    graph = build_graph(v_walk=v_walk, blocked=blocked)
-    dists, prevs = prepare_pairs(graph, KEY_NODES)
-    if starts is None:
-        sol = optimize(ROOMS, STARTS, dists, s_room)
-        return sol, dists, prevs
-    # 任意人数枚举：固定 R1 归 0 号响应者
-    k = len(starts)
-    best = None
-    for assign in itertools.product(range(k), repeat=len(ROOMS) - 1):
-        groups = [[ROOMS[0]]] + [[] for _ in range(k - 1)]
-        for room, gi in zip(ROOMS[1:], assign):
-            groups[gi].append(room)
-        perms = [list(itertools.permutations(g)) for g in groups]
-        for combo in itertools.product(*perms):
-            times = [route_eval(route, st, dists, s_room)[0]
-                     for route, st in zip(combo, starts)]
-            m = max(times)
-            if best is None or m < best[0] - 1e-9:
-                best = (m, combo, times)
-    return {"makespan": best[0], "routes": best[1], "times": best[2]}, dists, prevs
+def make_scene(v_walk=None, s_room=None, blocked=(), starts=None):
+    """按参数生成场景：速度 / 单间总处理时间 / 阻断边 / 响应者起点。
+
+    对应《基础场景建模假设.md》第 7 节的各敏感性情景；返回带派生量的 Scene。
+    """
+    cfg = Config()
+    if v_walk is not None:
+        cfg.v_hall = float(v_walk)
+    if blocked:
+        cfg.blocked_edges = [tuple(e) for e in blocked]
+    if starts is not None:
+        cfg.n_responders = len(starts)
+        cfg.responder_starts = [str(s) for s in starts]
+    scene = build_scene(cfg)
+    if s_room is not None:                    # 覆盖 s_i*：搜索时间随之伸缩
+        s_search = float(s_room) - cfg.t_report - cfg.t_mark
+        scene.s_search = s_search
+        scene.roomSearch = {r: s_search for r in scene.rooms}
+        scene.s_room = float(s_room)
+        scene.roomTime = {r: float(s_room) for r in scene.rooms}
+    return scene
+
+
+def solve(v_walk=None, s_room=None, blocked=(), starts=None):
+    """给定参数重算最优解，返回 (sol, dists, prevs)。
+
+    v_walk  — 覆盖走廊行走速度（默认基准 1.2 m/s）
+    s_room  — 覆盖单间总处理时间（默认 76 s）
+    blocked — 被阻断的边，如 [("N2", "N3")]，对应 x_e = 0
+    starts  — 各响应者起点列表，如 ["E_L", "E_R"]（默认两名响应者）
+    """
+    scene = make_scene(v_walk=v_walk, s_room=s_room, blocked=blocked, starts=starts)
+    dists, prevs = prepare_pairs(scene)
+    sol = optimize(scene, dists, verbose=False)
+    return sol, dists, prevs
 
 
 # ---------------------------------------------------------- 图 1：建模流程图
@@ -361,17 +375,16 @@ def fig_sensitivity(path):
 # ------------------------------------------------- 图 5：走廊受阻情景
 def fig_blocked(sol_base, prevs_base, path):
     blocked_edge = ("N2", "N3")
-    graph_b = build_graph(blocked=[blocked_edge])
-    dists_b, prevs_b = prepare_pairs(graph_b, KEY_NODES)
-    sol_b = optimize(ROOMS, STARTS, dists_b, S_ROOM)
+    scene_b = make_scene(blocked=[blocked_edge])
+    sol_b, dists_b, prevs_b = solve(blocked=[blocked_edge])
 
     fig, axes = plt.subplots(1, 2, figsize=(13.4, 5.4))
-    for ax, sol, prevs, blocked, subtitle in (
-            (axes[0], sol_base, prevs_base, False, "正常情形"),
-            (axes[1], sol_b, prevs_b, True, "走廊中段阻断（$x_e=0$）")):
+    for ax, sol, prevs, scene, blocked, subtitle in (
+            (axes[0], sol_base, prevs_base, DEFAULT_SCENE, False, "正常情形"),
+            (axes[1], sol_b, prevs_b, scene_b, True, "走廊中段阻断（$x_e=0$）")):
         face = {r: "#f4f4f4" for r in ROOMS}
-        draw_floorplan(ax, face)
-        draw_route_arrows(ax, sol["legs"], prevs)
+        draw_floorplan(ax, scene, face)
+        draw_route_arrows(ax, sol["legs"], prevs, scene=scene)
         if blocked:
             ax.plot([15, 25], [0, 0], color="#c0392b", lw=5, alpha=0.85,
                     zorder=8, solid_capstyle="round")
@@ -458,10 +471,8 @@ def fig_strategy(sol_base, dists, path):
 
 def main():
     # 基准解
-    graph = build_graph()
-    dists, prevs = prepare_pairs(graph, KEY_NODES)
-    sol = optimize(ROOMS, STARTS, dists, S_ROOM)
-    schedules, clear_times = build_schedule(sol["routes"], STARTS, prevs, WEIGHT)
+    sol, dists, prevs = solve()
+    schedules, clear_times = build_schedule(DEFAULT_SCENE, sol["routes"], prevs)
     T = sol["makespan"]
 
     FIG_DIR.mkdir(exist_ok=True)
