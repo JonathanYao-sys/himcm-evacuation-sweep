@@ -137,17 +137,12 @@ def fig_network(path):
     plt.close(fig)
 
 
-# ------------------------------------------------------- 图 2：最优路线静态图
-def fig_optimal_routes(solution, prevs, clear_times, path):
-    fig = plt.figure(figsize=(13.6, 6.8))
-    ax = fig.add_axes([0.015, 0.03, 0.66, 0.9])
-    face = {r: to_rgba(ROOM_COLOR[r], 0.30) for r in ROOMS}
-    draw_floorplan(ax, face)
-    # 路线箭头
-    for resp, legs in solution["legs"].items():
+def draw_route_arrows(ax, legs, prevs, label_steps=True):
+    """在楼层平面上绘制响应者路线箭头。legs: {resp: [(u, room, 耗时), ...]}"""
+    for resp, legs_r in legs.items():
         color = RESP_COLOR[resp]
         dy = 0.14 if resp == "A" else -0.14      # 同一走廊段上两人箭头错开
-        for step, (u, room, _) in enumerate(legs, 1):
+        for step, (u, room, _) in enumerate(legs_r, 1):
             nodes = shortest_path(prevs[u], u, room)
             for a, b in zip(nodes[:-1], nodes[1:]):
                 xa, ya = POS[a]
@@ -158,9 +153,18 @@ def fig_optimal_routes(solution, prevs, clear_times, path):
                     (xa, ya), (xb, yb), arrowstyle="-|>", mutation_scale=15,
                     lw=2.2, color=color, alpha=0.95, zorder=6,
                     shrinkA=4, shrinkB=4))
-            # 段序号标注在目标房间门口
-            ax.text(POS[room][0] + 0.55, POS[room][1], f"{resp}{step}",
-                    fontsize=9.5, fontweight="bold", color=color, zorder=7)
+            if label_steps:
+                ax.text(POS[room][0] + 0.55, POS[room][1], f"{resp}{step}",
+                        fontsize=9.5, fontweight="bold", color=color, zorder=7)
+
+
+# ------------------------------------------------------- 图 2：最优路线静态图
+def fig_optimal_routes(solution, prevs, clear_times, path):
+    fig = plt.figure(figsize=(13.6, 6.8))
+    ax = fig.add_axes([0.015, 0.03, 0.66, 0.9])
+    face = {r: to_rgba(ROOM_COLOR[r], 0.30) for r in ROOMS}
+    draw_floorplan(ax, face)
+    draw_route_arrows(ax, solution["legs"], prevs)
     # 房间内标注清查完成时刻
     for r in ROOMS:
         ax.text(POS[r][0], POS[r][1] + (1.15 if POS[r][1] > 0 else -1.15),

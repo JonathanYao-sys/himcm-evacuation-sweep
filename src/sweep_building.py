@@ -57,11 +57,18 @@ for _u, _v, _d in EDGES:
     WEIGHT[(_v, _u)] = _d / V_WALK
 
 
-def build_graph():
-    """返回邻接表 {node: [(neighbor, 通行时间 s), ...]}（无向图）。"""
+def build_graph(v_walk=V_WALK, blocked=()):
+    """返回邻接表 {node: [(neighbor, 通行时间 s), ...]}（无向图）。
+
+    v_walk  — 行走速度（默认基准 1.2 m/s）
+    blocked — 被阻断的边（如 [("N2", "N3")]），对应假设 x_e=0，从网络移除
+    """
+    blocked = {frozenset(e) for e in blocked}
     g = {n: [] for n in POS}
     for u, v, d in EDGES:
-        c = d / V_WALK
+        if frozenset((u, v)) in blocked:
+            continue
+        c = d / v_walk
         g[u].append((v, c))
         g[v].append((u, c))
     return g
